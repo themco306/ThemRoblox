@@ -1,6 +1,6 @@
 game:GetService("StarterGui"):SetCore("SendNotification",{
     Title = "Script Loaded";
-    Text = "Sub To Prototype RBLX";
+    Text = "Khanh ne";
     Duration = 20;
 })
 
