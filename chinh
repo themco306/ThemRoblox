@@ -1,0 +1,286 @@
+-- Dịch vụ Roblox
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+-- Cập nhật nhân vật khi respawn
+player.CharacterAdded:Connect(function(newChar)
+	character = newChar
+end)
+
+-- Tạo GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+screenGui.DisplayOrder = 999999
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- TextBox nhập tên người chơi
+local playerNameInput = Instance.new("TextBox")
+playerNameInput.Size = UDim2.new(0, 300, 0, 50)
+playerNameInput.Position = UDim2.new(0.5, -150, 0.4, -25)
+playerNameInput.Text = "Nhập tên người chơi"
+playerNameInput.Visible = false
+playerNameInput.Parent = screenGui
+
+-- Nút Bay
+local flyButton = Instance.new("TextButton")
+flyButton.Size = UDim2.new(0, 200, 0, 50)
+flyButton.Position = UDim2.new(0.5, -100, 0.5, 25)
+flyButton.Text = "Bay đến"
+flyButton.Visible = false
+flyButton.Parent = screenGui
+
+-- Nút Ngừng
+local stopButton = Instance.new("TextButton")
+stopButton.Size = UDim2.new(0, 200, 0, 50)
+stopButton.Position = UDim2.new(0.5, -100, 0.6, 25)
+stopButton.Text = "Ngừng"
+stopButton.Visible = false
+stopButton.Parent = screenGui
+
+-- Nút chỉnh tốc độ
+local speedButton = Instance.new("TextButton")
+speedButton.Size = UDim2.new(0, 200, 0, 50)
+speedButton.Position = UDim2.new(0.5, -100, 0.7, 25)
+speedButton.Text = "Tốc độ: 200"
+speedButton.Visible = false
+speedButton.Parent = screenGui
+
+-- Nút Lưu điểm
+local savePointButton = Instance.new("TextButton")
+savePointButton.Size = UDim2.new(0, 200, 0, 50)
+savePointButton.Position = UDim2.new(0.5, -100, 0.8, 25)
+savePointButton.Text = "Lưu điểm"
+savePointButton.Visible = false
+savePointButton.Parent = screenGui
+
+-- Khung danh sách điểm
+local pointsFrame = Instance.new("Frame")
+pointsFrame.Size = UDim2.new(0, 300, 0, 250)
+pointsFrame.Position = UDim2.new(0.75, 0, 0.35, 0)
+pointsFrame.BackgroundTransparency = 0.3
+pointsFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+pointsFrame.Visible = false
+pointsFrame.Parent = screenGui
+
+local UIListLayout = Instance.new("UIListLayout", pointsFrame)
+UIListLayout.FillDirection = Enum.FillDirection.Vertical
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0,5)
+
+-- Nút Tele2Player
+local teleButton = Instance.new("TextButton")
+teleButton.Size = UDim2.new(0, 150, 0, 40)
+teleButton.Position = UDim2.new(0.4, -75, 0.9, 0)
+teleButton.Text = "Tele2Player"
+teleButton.Parent = screenGui
+
+-- Biến
+local flightSpeed = 200
+local isFlying = false
+local currentTween
+local dragging = false
+local dragStart = nil
+local startPos = nil
+local noclipConnection = nil
+
+-- Danh sách điểm
+local savedPoints = {}
+
+-- Hàm NoClip
+local function enableNoClip()
+	if noclipConnection then return end
+	noclipConnection = RunService.Stepped:Connect(function()
+		if character then
+			for _, part in pairs(character:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.CanCollide = false
+				end
+			end
+		end
+	end)
+end
+
+local function disableNoClip()
+	if noclipConnection then
+		noclipConnection:Disconnect()
+		noclipConnection = nil
+	end
+end
+
+-- Bay đến người chơi
+local function flyToPlayerByName()
+	isFlying = true
+	local inputText = playerNameInput.Text:lower()
+	local targetPlayer = nil
+	for _, p in pairs(Players:GetPlayers()) do
+		if p.Name:lower():sub(1, #inputText) == inputText then
+			targetPlayer = p
+			break
+		end
+	end
+
+	if targetPlayer and targetPlayer.Character then
+		local targetPosition = targetPlayer.Character:WaitForChild("HumanoidRootPart").Position
+		local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+		local distance = (humanoidRootPart.Position - targetPosition).Magnitude
+		local travelTime = distance / flightSpeed
+
+		if currentTween then currentTween:Cancel() end
+		local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
+		local tweenGoal = {CFrame = CFrame.new(targetPosition)}
+		currentTween = TweenService:Create(humanoidRootPart, tweenInfo, tweenGoal)
+		currentTween:Play()
+		enableNoClip()
+
+		print("Đang bay đến: " .. targetPlayer.Name)
+	else
+		StarterGui:SetCore("SendNotification", {
+			Title = "Lỗi",
+			Text = "Không tìm thấy người chơi!",
+			Duration = 3
+		})
+	end
+end
+
+-- Dừng bay
+local function stopFlying()
+	if isFlying and currentTween then
+		currentTween:Cancel()
+		isFlying = false
+		disableNoClip()
+		print("Dừng bay")
+	end
+end
+
+-- Thay đổi tốc độ
+local function changeSpeed()
+	if flightSpeed == 200 then
+		flightSpeed = 300
+	elseif flightSpeed == 300 then
+		flightSpeed = 400
+	else
+		flightSpeed = 200
+	end
+	speedButton.Text = "Tốc độ: " .. flightSpeed
+	if isFlying then
+		stopFlying()
+		flyToPlayerByName()
+	end
+end
+
+-- Thêm điểm vào GUI
+local function addPointToList(newPoint, index)
+	local container = Instance.new("Frame")
+	container.Size = UDim2.new(1,0,0,40)
+	container.BackgroundTransparency = 1
+	container.Parent = pointsFrame
+
+	local pointButton = Instance.new("TextButton")
+	pointButton.Size = UDim2.new(0.6, -5, 1, 0)
+	pointButton.Text = "→ " .. newPoint.Name
+	pointButton.BackgroundColor3 = Color3.fromRGB(70,70,70)
+	pointButton.TextColor3 = Color3.new(1,1,1)
+	pointButton.Parent = container
+
+	local deleteButton = Instance.new("TextButton")
+	deleteButton.Size = UDim2.new(0.4, -5, 1, 0)
+	deleteButton.Position = UDim2.new(0.6, 5, 0, 0)
+	deleteButton.Text = "Xóa"
+	deleteButton.BackgroundColor3 = Color3.fromRGB(150,50,50)
+	deleteButton.TextColor3 = Color3.new(1,1,1)
+	deleteButton.Parent = container
+
+	-- Bay về điểm này
+	pointButton.MouseButton1Click:Connect(function()
+		local targetPosition = newPoint.Position
+		local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+		local distance = (humanoidRootPart.Position - targetPosition).Magnitude
+		local travelTime = distance / flightSpeed
+		if currentTween then currentTween:Cancel() end
+		local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
+		local tweenGoal = {CFrame = CFrame.new(targetPosition)}
+		currentTween = TweenService:Create(humanoidRootPart, tweenInfo, tweenGoal)
+		currentTween:Play()
+		enableNoClip()
+		isFlying = true
+	end)
+
+	-- Xóa điểm
+	deleteButton.MouseButton1Click:Connect(function()
+		container:Destroy()
+		savedPoints[index] = nil
+	end)
+end
+
+-- Lưu điểm với tên
+local function saveCurrentPoint()
+	if character and character:FindFirstChild("HumanoidRootPart") then
+		local pos = character.HumanoidRootPart.Position
+
+		-- Hộp nhập tên điểm
+		local nameBox = Instance.new("TextBox")
+		nameBox.Size = UDim2.new(0, 200, 0, 40)
+		nameBox.Position = UDim2.new(0.5, -100, 0.3, 0)
+		nameBox.PlaceholderText = "Nhập tên điểm..."
+		nameBox.Text = ""
+		nameBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		nameBox.TextColor3 = Color3.new(1,1,1)
+		nameBox.Parent = screenGui
+		nameBox.ZIndex = 1000
+
+		nameBox.FocusLost:Connect(function(enterPressed)
+			if enterPressed then
+				local pointName = nameBox.Text ~= "" and nameBox.Text or ("Điểm " .. tostring(#savedPoints+1))
+				local newPoint = {Name = pointName, Position = pos}
+				table.insert(savedPoints, newPoint)
+				addPointToList(newPoint, #savedPoints)
+				nameBox:Destroy()
+			end
+		end)
+	end
+end
+
+-- Toggle GUI
+local function toggleAllGUI()
+	playerNameInput.Visible = not playerNameInput.Visible
+	flyButton.Visible = not flyButton.Visible
+	stopButton.Visible = not stopButton.Visible
+	speedButton.Visible = not speedButton.Visible
+	savePointButton.Visible = not savePointButton.Visible
+	pointsFrame.Visible = not pointsFrame.Visible
+end
+
+-- Sự kiện nút
+teleButton.MouseButton1Click:Connect(toggleAllGUI)
+flyButton.MouseButton1Click:Connect(flyToPlayerByName)
+stopButton.MouseButton1Click:Connect(stopFlying)
+speedButton.MouseButton1Click:Connect(changeSpeed)
+savePointButton.MouseButton1Click:Connect(saveCurrentPoint)
+
+-- Kéo thả nút Tele2Player
+teleButton.MouseButton1Down:Connect(function(input)
+	dragging = true
+	dragStart = input.Position
+	startPos = teleButton.Position
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging then
+		local delta = input.Position - dragStart
+		teleButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+										startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
+end)
